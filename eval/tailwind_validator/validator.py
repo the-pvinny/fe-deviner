@@ -150,16 +150,28 @@ def _validate_color_value(value: str) -> ViolationCategory | None:
     return None
 
 
+_POSITION_PREFIXES = frozenset(
+    {"top", "right", "bottom", "left", "inset", "inset-x", "inset-y", "start", "end"}
+)
+
+
 def _validate_spacing_value(prefix: str, value: str) -> bool:
     if value in SPACING_SCALE:
         return True
     # auto is valid for margin and positioning utilities
     if value == "auto" and prefix in (
         "m", "mx", "my", "mt", "mr", "mb", "ml", "ms", "me",
-        "inset", "inset-x", "inset-y", "top", "right", "bottom", "left", "start", "end",
+        *_POSITION_PREFIXES,
     ):
         return True
+    # Sizing utilities accept special keywords and fractions
     if prefix in ("w", "h", "min-w", "min-h", "max-h", "size", "basis"):
+        if value in SIZE_SPECIAL_VALUES:
+            return True
+        if FRACTION_PATTERN.match(value):
+            return True
+    # Positioning utilities also accept special keywords and fractions (top-1/2, bottom-full, etc.)
+    if prefix in _POSITION_PREFIXES:
         if value in SIZE_SPECIAL_VALUES:
             return True
         if FRACTION_PATTERN.match(value):
@@ -205,14 +217,20 @@ def _validate_base_class(base: str) -> list[tuple[ViolationCategory, str]]:
         return errors
     if base.startswith("font-") and base[5:] in FONT_WEIGHTS:
         return errors
+    if base in ("font-sans", "font-serif", "font-mono"):
+        return errors
     if base.startswith("tracking-") and base[9:] in TRACKING:
         return errors
     if base.startswith("leading-") and base[8:] in LEADING:
         return errors
 
-    # Border radius
+    # Border radius — handle directional variants (rounded-t-xl, rounded-bl-2xl, etc.)
     if base.startswith("rounded"):
         suffix = base[7:].lstrip("-") or "DEFAULT"
+        _RADIUS_SIDES = {"t", "r", "b", "l", "tl", "tr", "br", "bl", "s", "e", "ss", "se", "es", "ee"}
+        parts = suffix.split("-", 1)
+        if parts[0] in _RADIUS_SIDES:
+            suffix = parts[1] if len(parts) == 2 else "DEFAULT"
         if suffix in BORDER_RADIUS or base == "rounded":
             return errors
         errors.append((ViolationCategory.INVALID_RADIUS, f"Unknown radius token: {suffix}"))
@@ -262,11 +280,16 @@ def _validate_base_class(base: str) -> list[tuple[ViolationCategory, str]]:
         errors.append((ViolationCategory.INVALID_OPACITY, f"Unknown opacity: {suffix}"))
         return errors
 
-    # Grid/flex enumerated
-    for prefix in ("grid-cols", "grid-rows", "col-span", "row-span", "order"):
+    # Grid/flex enumerated — includes placement utilities (col-start, row-end, etc.)
+    for prefix in (
+        "grid-cols", "grid-rows",
+        "col-span", "col-start", "col-end",
+        "row-span", "row-start", "row-end",
+        "order",
+    ):
         if base.startswith(prefix + "-"):
             suffix = base[len(prefix) + 1 :]
-            if suffix.isdigit() or suffix in ("none", "full", "subgrid"):
+            if suffix.isdigit() or suffix in ("none", "full", "subgrid", "auto"):
                 return errors
 
     # Translate utilities with spacing scale (including negative: -translate-y-0.5)
@@ -278,6 +301,48 @@ def _validate_base_class(base: str) -> list[tuple[ViolationCategory, str]]:
                 if value in SPACING_SCALE:
                     return errors
                 if value in ("full", "1/2", "1/3", "2/3", "1/4", "2/4", "3/4"):
+                    return errors
+
+    # scale-x / scale-y with the same values as the standalone scale-{n} utilities
+    _SCALE_VALUES = frozenset({"0", "50", "75", "90", "95", "100", "105", "110", "125", "150"})
+    for axis in ("x", "y", "z"):
+        for sign in ("", "-"):
+            prefix = f"{sign}scale-{axis}"
+            if base.startswith(prefix + "-"):
+                if base[len(prefix) + 1 :] in _SCALE_VALUES:
+                    return errors
+            if base == prefix:
+                return errors
+
+    # Negative spacing utilities: -mt-4, -top-1/2, -mx-6, -right-1.5, etc.
+    if base.startswith("-"):
+        positive = base[1:]
+        neg_spacing = _match_prefix(positive, set(SPACING_PREFIXES.keys()))
+        if neg_spacing:
+            prefix, value = neg_spacing
+            if _validate_spacing_value(prefix, value):
+                return errors
+
+    # tailwindcss-animate utilities (animate-in, fade-in, zoom-in-*, slide-in-from-*, etc.)
+    _ANIM_SIDES = frozenset({"top", "right", "bottom", "left"})
+    _ANIM_SCALE = frozenset({"0", "50", "75", "90", "95", "100", "105", "110", "125", "150"})
+    if base in ("animate-in", "animate-out", "fade-in", "fade-out", "fade-in-0", "fade-out-0"):
+        return errors
+    if base.startswith("zoom-in-") or base.startswith("zoom-out-"):
+        suffix = base[8:] if base.startswith("zoom-in-") else base[9:]
+        if suffix in _ANIM_SCALE:
+            return errors
+    if base.startswith("spin-in-") or base.startswith("spin-out-"):
+        return errors
+    for _anim_prefix, _anim_len in (("slide-in-from-", 14), ("slide-out-to-", 13)):
+        if base.startswith(_anim_prefix):
+            rest = base[_anim_len:]
+            parts = rest.split("-", 1)
+            if parts[0] in _ANIM_SIDES:
+                if len(parts) == 1:
+                    return errors
+                val = parts[1]
+                if val in SPACING_SCALE or val == "full" or FRACTION_PATTERN.match(val):
                     return errors
 
     # Color utilities

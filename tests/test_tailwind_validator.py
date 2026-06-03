@@ -63,6 +63,56 @@ class TestValidClasses:
             "lowercase",
             "capitalize",
             "normal-case",
+            # Font family
+            "font-sans",
+            "font-serif",
+            "font-mono",
+            # Negative spacing
+            "-mt-4",
+            "-mx-6",
+            "-top-40",
+            "-right-1.5",
+            "-mb-px",
+            # Fractional positioning
+            "top-1/2",
+            "left-1/4",
+            "bottom-full",
+            "top-full",
+            # Directional border radius
+            "rounded-t-xl",
+            "rounded-b-none",
+            "rounded-l-2xl",
+            "lg:rounded-r-none",
+            # Grid placement
+            "col-start-1",
+            "col-end-3",
+            "row-start-2",
+            "row-end-auto",
+            # tailwindcss-animate
+            "animate-in",
+            "animate-out",
+            "fade-in",
+            "fade-out",
+            "zoom-in-95",
+            "zoom-out-75",
+            "slide-in-from-bottom",
+            "slide-in-from-bottom-2",
+            "slide-in-from-bottom-full",
+            "slide-in-from-right",
+            "slide-out-to-top",
+            "motion-safe:animate-in",
+            "motion-safe:fade-in",
+            "motion-safe:zoom-in-95",
+            "motion-safe:slide-in-from-right",
+            # scale-x/y
+            "scale-x-0",
+            "scale-x-95",
+            "scale-y-100",
+            "-scale-x-100",
+            # Pseudo-element variants
+            "after:scale-x-0",
+            "before:opacity-0",
+            "placeholder:text-muted-foreground",
         ],
     )
     def test_allowed_classes_pass(self, cls: str):
