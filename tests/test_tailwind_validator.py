@@ -59,6 +59,10 @@ class TestValidClasses:
             "accent-primary",
             "-translate-y-0.5",
             "group-hover:shadow-md",
+            "uppercase",
+            "lowercase",
+            "capitalize",
+            "normal-case",
         ],
     )
     def test_allowed_classes_pass(self, cls: str):

@@ -59,7 +59,7 @@ export function SiteFooter({
               <nav key={column.label} aria-labelledby={headingId}>
                 <h3
                   id={headingId}
-                  className="mb-4 text-xs font-semibold tracking-wider text-foreground"
+                  className="mb-4 text-xs font-semibold uppercase tracking-wider text-foreground"
                 >
                   {column.label}
                 </h3>
