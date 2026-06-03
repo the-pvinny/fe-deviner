@@ -1,0 +1,69 @@
+---
+description: Component structure, React/HTML patterns, accessibility requirements, naming conventions
+alwaysApply: true
+---
+
+# METHOD — Component Structure & Patterns
+
+Non-negotiable rules for how components are built, regardless of style or pattern context.
+
+## Output Format
+
+Default: **React (TSX) with Tailwind v4 utility classes**. When HTML is explicitly requested, output semantic HTML with the same Tailwind classes.
+
+### React Component Structure
+
+- One component per output unless composing a layout
+- Props use destructuring with defaults; `className` always accepted, merged last via `cn()`
+- Spread remaining props with `{...props}` for composability
+- Named exports, PascalCase names, no abbreviations
+
+### Composition over Monoliths
+
+Break complex UI into composable compound components (shadcn/ui pattern): `Card` + `CardHeader` + `CardContent` + `CardFooter`, not one component with 12 props.
+
+### Variant Pattern
+
+Use variant map objects for distinct visual modes. For 3+ states, use a map (not ternaries). For complex multi-dimension variants, use `cva`.
+
+## Semantic HTML
+
+Use the right element: `<section>` with heading (not `<div>`), `<nav>` (not `<div className="nav">`), `<button>` (not `<div onClick>`), `<a>`/`<Link>` for navigation, `<label htmlFor>` for inputs, `<table>` for data. `<h1>` appears once per page; never skip heading levels.
+
+## Accessibility (WCAG 2.1 AA baseline)
+
+- Every interactive element: accessible text (visible label, `aria-label`, or `aria-labelledby`)
+- Every input: associated `<label>` via wrapping or `htmlFor`/`id`
+- Focus visible: `focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2` minimum
+- Keyboard: Tab reaches all interactives, Escape closes overlays, Enter/Space activates, arrows navigate composites, focus trapping in modals
+- Screen readers: `alt=""` + `aria-hidden="true"` for decorative images, `aria-label` on icon-only buttons, `aria-live` for dynamic content, `aria-busy="true"` for loading
+- Contrast: 4.5:1 normal text, 3:1 large text, 3:1 UI components; never color-only information
+- Motion: `motion-safe:` wrapper, no auto-play without pause, no 3+ flashes/second
+
+## Responsive Design
+
+Mobile-first. Breakpoints: (none) → `sm:` 640px → `md:` 768px → `lg:` 1024px → `xl:` 1280px → `2xl:` 1536px.
+
+- Stack vertical on mobile, reflow horizontal at `md:`/`lg:`
+- Touch targets: min 44×44px (`min-h-11 min-w-11`)
+- No horizontal scroll on any breakpoint
+- Container: `max-w-screen-xl mx-auto px-4 sm:px-6 lg:px-8`
+
+## Naming
+
+Components: PascalCase. Props: camelCase. Variants: lowercase strings. CSS vars: kebab-case. Files: kebab-case matching component. Handlers: `on` + action.
+
+## State Patterns
+
+- **Loading:** `disabled aria-busy="true"` + spinner with `aria-hidden="true"`
+- **Empty:** always provide an empty state with action; never blank
+- **Error:** inline near source, `role="alert"`, destructive color, recovery guidance
+- **Disabled:** `opacity-50 pointer-events-none aria-disabled="true"`
+
+## Data Attributes
+
+`data-slot` on component roots (shadcn/ui convention). `data-state` for stateful components.
+
+## Imports
+
+UI from `@/components/ui/*`, utils from `@/lib/utils`, icons from `lucide-react` (named imports). Sort: external → internal aliases → relative.

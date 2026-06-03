@@ -134,15 +134,93 @@ A LoRA-fine-tuned model that has internalized config adherence and design princi
 - **RAM:** 64GB DDR5 — sufficient
 - **Storage:** Ensure 2TB+ NVMe available for models, datasets, checkpoints
 
+### Hardware Compatibility
+
+**RTX 5090 (32GB VRAM) with Gemma 4 31B:**
+- Training (QLoRA + FlashAttention-2): ~24-28 GB VRAM
+- Inference (Q4 quantization): ~18-20 GB VRAM
+- Inference (vLLM + AWQ): ~20-22 GB VRAM with 8K context
+
+**Requirements:**
+- CUDA 12.1+
+- Linux (vLLM requires Linux; WSL2 works for development)
+- Python 3.10-3.11
+
 ### Model Target
-- **Start:** Qwen2.5-Coder 14B (fits comfortably in VRAM, fast iteration)
-- **Upgrade path:** Qwen2.5-Coder 32B if quality plateaus (tight but viable at 4-bit)
+- **Model:** Gemma 4 31B (Google DeepMind, April 2026)
+- **Parameters:** 31 billion, dense transformer architecture
+- **Context window:** 256K tokens
+- **Capabilities:** Text + image multimodal input
+- **VRAM at Q4:** ~18-20 GB (fits RTX 5090 with headroom)
+- **VRAM at BF16:** 48-64 GB (requires multi-GPU or cloud)
 
 ### Training Method
-- **QLoRA** (quantized LoRA) — 4-bit base model + LoRA adapters
-- **Framework:** Unsloth (faster than vanilla HuggingFace on single consumer GPU)
-- **Libraries:** `transformers`, `peft`, `trl`, `bitsandbytes`
-- **SFT first** → **DPO second**
+- **Framework:** Axolotl (YAML-driven, production-grade fine-tuning)
+- **Adapter:** QLoRA (4-bit quantized base + LoRA adapters)
+- **Memory optimizations:**
+  - BitsAndBytes NF4 quantization (`load_in_4bit: true`)
+  - FlashAttention-2 (`flash_attention: true`)
+  - Sample packing (`sample_packing: true`)
+  - Gradient checkpointing
+- **Training phases:** SFT first, then DPO
+
+### Axolotl Configuration
+
+**Installation:**
+```bash
+pip install axolotl
+pip install flash-attn --no-build-isolation
+```
+
+**Base training config (`config.yml`):**
+```yaml
+base_model: google/gemma-4-31B
+model_type: GemmaForCausalLM
+
+# QLoRA settings
+adapter: qlora
+load_in_4bit: true
+lora_r: 64
+lora_alpha: 128
+lora_dropout: 0.05
+lora_target_modules:
+  - q_proj
+  - k_proj
+  - v_proj
+  - o_proj
+  - gate_proj
+  - up_proj
+  - down_proj
+
+# Memory optimizations
+flash_attention: true
+sample_packing: true
+gradient_checkpointing: true
+bf16: true
+
+# Training parameters
+micro_batch_size: 1
+gradient_accumulation_steps: 8
+num_epochs: 3
+learning_rate: 2e-4
+lr_scheduler: cosine
+warmup_ratio: 0.03
+optimizer: adamw_bnb_8bit
+
+# Dataset
+datasets:
+  - path: ./data/training.jsonl
+    type: sharegpt
+
+output_dir: ./outputs/gemma-4-31b-qlora
+```
+
+**Run training:**
+```bash
+axolotl train config.yml
+```
+
+**Expected VRAM usage:** ~24-28 GB with QLoRA + FlashAttention-2 + gradient checkpointing
 
 ### Training Phases
 
@@ -154,16 +232,35 @@ A LoRA-fine-tuned model that has internalized config adherence and design princi
 
 ### Serving and Inference (Phase 2)
 
-The fine-tuned model runs locally via **Ollama** (preferred for Cursor integration) or **vllm** (higher throughput if needed later).
+The fine-tuned model runs locally via **vLLM** (primary) for high-throughput serving with PagedAttention.
+
+**vLLM Installation:**
+```bash
+pip install vllm
+```
+
+**Key vLLM Features:**
+- **PagedAttention:** Divides KV cache into 16-token blocks, reduces VRAM usage by 50%+ in long-context scenarios
+- **Continuous Batching:** Iteration-level scheduling, 2-5x throughput vs static batching
+- **Prefix caching:** Share context across requests with identical prefixes
+
+**Serving the merged model:**
+```bash
+vllm serve ./outputs/gemma-4-31b-merged \
+  --tensor-parallel-size 1 \
+  --max-model-len 8192 \
+  --quantization awq \
+  --enable-prefix-caching
+```
 
 **Workflow:**
-1. Export LoRA-merged model weights after training
-2. Convert to GGUF format (via `llama.cpp` convert tools) for Ollama
-3. Create an Ollama `Modelfile` with the system prompt baked in (CONFIG + METHOD + DESIGN)
-4. Register in Cursor as a custom model endpoint
-5. Per-prompt STYLES/PATTERNS files continue to be `@`-mentioned — same workflow as Phase 1
+1. Merge LoRA adapters into base model after training
+2. Optionally quantize merged model (AWQ or GPTQ) for lower VRAM
+3. Serve via vLLM OpenAI-compatible API
+4. Register in Cursor as custom model endpoint (`http://localhost:8000/v1`)
+5. Per-prompt STYLES/PATTERNS files continue to be `@`-mentioned
 
-**Quantization target:** 4-bit (Q4_K_M) for the 14B model fits comfortably in 32GB VRAM with headroom for context. Use 8-bit (Q8) if quality is insufficient and latency is acceptable.
+**Fallback:** Ollama with GGUF conversion for simpler local deployment if vLLM overhead is unnecessary.
 
 The Cursor rules injection method from Phase 1 remains unchanged in Phase 2. The only difference is the model behind the endpoint.
 
@@ -308,7 +405,7 @@ Deterministic. This is the primary quality metric — a real number, not a loss 
 # Output: structural violation rate per rule category
 ```
 
-Catches METHOD.md drift that the class validator won't see.
+Implemented in `eval/structural_validator/`. Checks inline styles, default exports, div/span onClick, missing alt/labels, focus-visible on interactives, icon-only buttons, multiple h1.
 
 ### Layer 3 — Render Validity Check
 
@@ -318,7 +415,7 @@ Catches METHOD.md drift that the class validator won't see.
 # Output: pass/fail + error type
 ```
 
-Ensures outputs are actually usable, not just class-compliant.
+Implemented in `eval/render_validator/`. Checks unclosed strings, unbalanced braces, tag matching, JSX fragments, malformed imports.
 
 ### Layer 4 — LLM-as-Judge (Design Quality, Small Held-Out Set)
 
@@ -382,12 +479,14 @@ Score 1–5 per dimension. Track deltas across training runs. This is expensive 
 - [ ] Draft initial STYLES/ files for your most-used aesthetics
 - [ ] Draft initial PATTERNS/ files for your most-used patterns
 - [ ] Write Obsidian → JSONL extraction script
-- [ ] Install Unsloth, verify it runs on RTX 5090
-- [ ] Build Tailwind class validator eval script
+- [ ] Install Axolotl and verify FlashAttention-2 works on RTX 5090
+- [ ] Install vLLM and test serving a small model
+- [x] Build Tailwind class validator eval script (Layer 1)
+- [x] Build structural validator (Layer 2) and render validity check (Layer 3)
 
 ### Week 3 — First Training Experiment
 - [ ] Format strongest 50–100 component examples to Tier 2
-- [ ] Run QLoRA SFT on Qwen2.5-Coder 14B
+- [ ] Run QLoRA SFT on Gemma 4 31B
 - [ ] Run eval validator on outputs
 - [ ] Identify primary drift failure modes
 
@@ -395,7 +494,7 @@ Score 1–5 per dimension. Track deltas across training runs. This is expensive 
 - [ ] Scale dataset based on drift failure modes
 - [ ] Add rejected pairs for DPO on weakest areas
 - [ ] Expand STYLES/ and PATTERNS/ coverage
-- [ ] Upgrade to 32B only if 14B quality plateaus
+- [ ] Experiment with longer context lengths if quality is sufficient
 
 ---
 
@@ -404,13 +503,13 @@ Score 1–5 per dimension. Track deltas across training runs. This is expensive 
 | Decision | Choice | Reason |
 |---|---|---|
 | Build vs fine-tune | Fine-tune existing model | Cost, time, sufficient for goal |
-| Base model | Qwen2.5-Coder 14B → 32B | Strong frontend benchmarks, fits VRAM |
+| Base model | Gemma 4 31B | 256K context, strong code benchmarks, fits 32GB at Q4 |
 | Training method | QLoRA + DPO | Single GPU viable, suppresses base model fallback |
-| Framework | Unsloth + HuggingFace trl/peft | Optimized for consumer GPU, well-maintained |
+| Framework | Axolotl + BitsAndBytes + FlashAttention-2 | Production-grade, memory-optimized, YAML-driven |
 | Output targets | React and HTML/CSS | Both supported, tagged per example |
 | Config injection | Full config every inference | Simpler, more reliable than partial slices |
 | Injection method | Cursor Rules (always-on) + @-file (per-prompt) | IDE-native, zero friction, format-portable to training pipeline |
-| Phase 2 serving | Ollama + GGUF via Cursor custom endpoint | Seamless Phase 1→2 transition, same injection method |
+| Phase 2 serving | vLLM (PagedAttention + Continuous Batching) | 2-5x throughput, 50% VRAM reduction, OpenAI-compatible API |
 | Aesthetic context | Preserved as prompt dimension | Core differentiator, not flattened away |
 | Principles | System prompt layer, not training pairs | Editable without retraining |
 | Start point | Agent .md files first | Immediate utility, feeds fine-tuning later |

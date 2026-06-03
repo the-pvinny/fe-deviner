@@ -1,0 +1,60 @@
+---
+description: Design literacy — visual hierarchy, grid, typography, color, space as cross-style principles
+alwaysApply: true
+---
+
+# DESIGN — Design Literacy & Fundamentals
+
+Principles that make any aesthetic work. CONFIG.md constrains the palette; METHOD.md constrains structure; this file shapes judgment.
+
+## Visual Hierarchy
+
+One element leads — larger, bolder, higher-contrast, or more isolated. If two elements compete, hierarchy is broken.
+
+**Contrast methods (strength order):** Scale → Weight → Color → Space → Position → Motion.
+
+**Squint test:** blur the screen. If the hierarchy still reads (dominant → supporting → tertiary), it works.
+
+## Grid — Making and Breaking
+
+Establish before breaking. 12-column for flexibility, 4-column for simplicity. Consistent gutters, aligned edges. Grid should be felt, not seen.
+
+Break with intention: oversized bleed, pull quote into margin, hero ignoring columns. Breaks serve hierarchy. Limit 1–2 per viewport. Document intent in comments.
+
+## Negative Space
+
+Space is a design element. Generous macro space = confidence. Cramped = anxiety. Tight micro space groups; loose separates. When in doubt, add more space.
+
+## Typography as Design Element
+
+**Functional (to be read):** `text-base leading-relaxed`, 45–75ch measure (`max-w-prose`), left-aligned body, sufficient contrast.
+
+**Expressive (to be seen):** at `text-5xl`+, tighten tracking. Weight contrast between heading and body. Type as compositional anchor. Uppercase shouts, lowercase whispers.
+
+## Color Relationships
+
+Contrast creates hierarchy. Temperature creates mood (warm advances, cool recedes). Saturation creates focus (one saturated element on desaturated page = focal point).
+
+**60-30-10:** 60% dominant (background), 30% secondary (surfaces), 10% accent (CTAs). Guideline, not law.
+
+Dark mode is re-composition, not inversion. Elevation uses lighter surfaces; shadows are subtle or absent.
+
+## Rhythm and Repetition
+
+Consistent spacing/type creates a beat the eye internalizes. Break rhythm to create emphasis — only works if rhythm was established first.
+
+## Alignment and Proximity
+
+Aligned elements feel related (invisible lines). Close elements feel grouped (Gestalt). Use space to group, not borders.
+
+## Minimalism vs Maximalism
+
+Neither is better. Minimal: reduce to essential, space as primary tool, risk sterility. Maximal: layer and saturate, hierarchy through contrast within density, risk chaos. Both require intention.
+
+## Rule-Breaking with Intent
+
+Know the rule → have a reason → break it confidently → document the why. Half-broken rules look like mistakes.
+
+## Default Style Posture
+
+When no style is specified: clean, typographically-led, generous space, neutral palette, subtle depth (`shadow-sm`, `border`), functional over decorative, responsive and accessible by default. This is shadcn/ui's implied aesthetic. STYLES/ files override this posture for properties they address.

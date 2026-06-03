@@ -1,0 +1,87 @@
+---
+description: Authoritative Tailwind token reference — all allowed classes, semantic color system, spacing, typography, and anti-patterns
+alwaysApply: true
+---
+
+# CONFIG — Tailwind Token Reference
+
+This file is the authoritative source of allowed design tokens. Every class used in output must resolve to a token defined here or in Tailwind v4's default utility set. No exceptions.
+
+## Color System
+
+Two layers: **primitives** (raw scales) and **semantic tokens** (purpose-driven, what you actually use in components).
+
+### Primitive Color Scales
+
+Defined in `:root` as CSS variables. Do not use primitives directly in component classes. Always go through semantic tokens.
+
+Scale steps: 50 (lightest tint) → 100 → 200 → 300 → 400 → 500 (mid-tone) → 600 → 700 → 800 → 900 → 950 (deepest).
+
+Available primitive palettes: **neutral** (achromatic), **blue** (information, links), **red** (errors, danger), **green** (success), **amber** (warning), **violet** (creative, accent). Full OKLCH values in `agent/CONFIG.md`.
+
+### Semantic Color Tokens
+
+These are the tokens you use in Tailwind classes. Each maps to a primitive via CSS variable in `@theme inline`.
+
+| Semantic Token | Maps To (Light) | Purpose |
+|---|---|---|
+| `background` / `foreground` | `neutral-50` / `neutral-950` | Page surface and default text |
+| `card` / `card-foreground` | `neutral-50` / `neutral-950` | Card surfaces |
+| `popover` / `popover-foreground` | `neutral-50` / `neutral-950` | Popover surfaces |
+| `primary` / `primary-foreground` | `neutral-900` / `neutral-50` | Main actions, active states |
+| `secondary` / `secondary-foreground` | `neutral-100` / `neutral-900` | Supporting actions |
+| `muted` / `muted-foreground` | `neutral-100` / `neutral-500` | Subdued content, disabled |
+| `accent` / `accent-foreground` | `neutral-100` / `neutral-900` | Highlights, hover states |
+| `destructive` | `red-600` | Deletions, errors |
+| `success` / `success-foreground` | `green-600` / `neutral-50` | Confirmations, positive |
+| `warning` / `warning-foreground` | `amber-500` / `neutral-950` | Caution states |
+| `border` | `neutral-200` | Default borders |
+| `input` | `neutral-200` | Input borders |
+| `ring` | `neutral-400` | Focus rings |
+
+Also available: `chart-1` through `chart-5`, `sidebar` family tokens. Dark mode inverts the lightness axis.
+
+## Spacing
+
+Tailwind v4 default scale. Base unit: `0.25rem` (4px). Key stops: `1` (0.25rem), `2` (0.5rem), `3` (0.75rem), `4` (1rem), `6` (1.5rem), `8` (2rem), `12` (3rem), `16` (4rem), `20` (5rem), `24` (6rem), `32` (8rem). Full scale in `agent/CONFIG.md`.
+
+**Rule:** Do not mix spacing scales within a single component. Pick a rhythmic subset and stay consistent.
+
+## Typography
+
+**Size:** `text-xs` (0.75rem) → `text-sm` → `text-base` (1rem) → `text-lg` → `text-xl` → `text-2xl` → `text-3xl` → `text-4xl` → `text-5xl` (3rem) → `text-6xl` → `text-7xl` → `text-8xl` → `text-9xl` (8rem).
+
+**Weight:** `font-thin` (100) → `font-extralight` → `font-light` → `font-normal` (400) → `font-medium` → `font-semibold` → `font-bold` (700) → `font-extrabold` → `font-black` (900).
+
+**Tracking:** `tracking-tighter` (-0.05em) → `tracking-tight` → `tracking-normal` → `tracking-wide` → `tracking-wider` → `tracking-widest` (0.1em).
+
+**Leading:** `leading-none` (1) → `leading-tight` (1.25) → `leading-snug` → `leading-normal` (1.5) → `leading-relaxed` (1.625) → `leading-loose` (2).
+
+## Border Radius
+
+Derived from `--radius: 0.625rem`. Tokens: `rounded-sm` → `rounded-md` → `rounded-lg` (base) → `rounded-xl` → `rounded-2xl` → `rounded-3xl` → `rounded-4xl` → `rounded-full`.
+
+## Shadows
+
+`shadow-xs` → `shadow-sm` → `shadow-md` → `shadow-lg` → `shadow-xl` → `shadow-2xl` → `shadow-none`.
+
+## Transitions
+
+**Duration:** `duration-75` → `duration-100` → `duration-150` (default hover) → `duration-200` (standard) → `duration-300` (enter/leave) → `duration-500` → `duration-700` → `duration-1000`.
+
+**Easing:** `ease-linear` (progress bars), `ease-in` (exits), `ease-out` (entries), `ease-in-out` (toggles).
+
+## Z-Index
+
+`z-0` (base) → `z-10` (sticky) → `z-20` (dropdowns) → `z-30` (fixed nav) → `z-40` (modal overlays) → `z-50` (toasts).
+
+## Never Do This
+
+- **No arbitrary values** — `w-[247px]`, `text-[13px]`, `bg-[#ff5733]` are forbidden
+- **No inline styles** — `style={{ }}` bypasses the design system
+- **No `!important`** — fix the cascade instead
+- **No mixing spacing scales** within a single component
+- **No primitive colors in classes** — use semantic tokens (`bg-primary`), never raw scale values
+- **No omitting focus states** — `focus-visible:ring` or equivalent is mandatory
+- **No `text-black` or `text-white`** — use `text-foreground`, `text-primary-foreground`, etc.
+- **No hardcoded color values in CSS** — all colors flow through the variable system
