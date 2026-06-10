@@ -155,72 +155,117 @@ A LoRA-fine-tuned model that has internalized config adherence and design princi
 - **VRAM at BF16:** 48-64 GB (requires multi-GPU or cloud)
 
 ### Training Method
-- **Framework:** Axolotl (YAML-driven, production-grade fine-tuning)
+- **Framework:** Unsloth (2–5x faster than standard QLoRA via custom CUDA kernels, 40–60% less VRAM)
 - **Adapter:** QLoRA (4-bit quantized base + LoRA adapters)
 - **Memory optimizations:**
-  - BitsAndBytes NF4 quantization (`load_in_4bit: true`)
-  - FlashAttention-2 (`flash_attention: true`)
-  - Sample packing (`sample_packing: true`)
+  - Unsloth custom kernels (replaces BitsAndBytes for speed; BitsAndBytes still used for quantization)
+  - FlashAttention-2 (built into Unsloth)
   - Gradient checkpointing
 - **Training phases:** SFT first, then DPO
 
-### Axolotl Configuration
+**Why Unsloth over Axolotl:** Single-GPU iteration speed is the primary bottleneck in this workflow. Unsloth's hand-written CUDA kernels give 2–5x faster training and ~40–60% VRAM reduction with no change to dataset format or downstream tooling. The dataset (`sharegpt` JSONL), eval stack, and agent `.md` files are all framework-agnostic — switching to Axolotl later costs nothing.
+
+### Unsloth Configuration
 
 **Installation:**
 ```bash
-pip install axolotl
-pip install flash-attn --no-build-isolation
+pip install unsloth
+pip install "unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git"
 ```
 
-**Base training config (`config.yml`):**
-```yaml
-base_model: google/gemma-4-31B
-model_type: GemmaForCausalLM
+**Base SFT training script (`train_sft.py`):**
+```python
+from unsloth import FastLanguageModel
+from trl import SFTTrainer
+from transformers import TrainingArguments
+from datasets import load_dataset
 
-# QLoRA settings
-adapter: qlora
-load_in_4bit: true
-lora_r: 64
-lora_alpha: 128
-lora_dropout: 0.05
-lora_target_modules:
-  - q_proj
-  - k_proj
-  - v_proj
-  - o_proj
-  - gate_proj
-  - up_proj
-  - down_proj
+model, tokenizer = FastLanguageModel.from_pretrained(
+    model_name="google/gemma-4-31B",
+    max_seq_length=8192,
+    load_in_4bit=True,
+)
 
-# Memory optimizations
-flash_attention: true
-sample_packing: true
-gradient_checkpointing: true
-bf16: true
+model = FastLanguageModel.get_peft_model(
+    model,
+    r=64,
+    lora_alpha=128,
+    lora_dropout=0.05,
+    target_modules=["q_proj", "k_proj", "v_proj", "o_proj",
+                    "gate_proj", "up_proj", "down_proj"],
+    use_gradient_checkpointing="unsloth",
+    bias="none",
+)
 
-# Training parameters
-micro_batch_size: 1
-gradient_accumulation_steps: 8
-num_epochs: 3
-learning_rate: 2e-4
-lr_scheduler: cosine
-warmup_ratio: 0.03
-optimizer: adamw_bnb_8bit
+dataset = load_dataset("json", data_files="./data/training.jsonl", split="train")
 
-# Dataset
-datasets:
-  - path: ./data/training.jsonl
-    type: sharegpt
+trainer = SFTTrainer(
+    model=model,
+    tokenizer=tokenizer,
+    train_dataset=dataset,
+    dataset_text_field="text",
+    max_seq_length=8192,
+    args=TrainingArguments(
+        per_device_train_batch_size=1,
+        gradient_accumulation_steps=8,
+        num_train_epochs=3,
+        learning_rate=2e-4,
+        lr_scheduler_type="cosine",
+        warmup_ratio=0.03,
+        optim="adamw_8bit",
+        bf16=True,
+        output_dir="./outputs/gemma-4-31b-qlora",
+    ),
+)
+trainer.train()
 
-output_dir: ./outputs/gemma-4-31b-qlora
+model.save_pretrained("./outputs/gemma-4-31b-qlora")
+tokenizer.save_pretrained("./outputs/gemma-4-31b-qlora")
 ```
 
-**Run training:**
-```bash
-axolotl train config.yml
+**DPO training script (`train_dpo.py`):**
+```python
+from unsloth import FastLanguageModel, PatchDPOTrainer
+from trl import DPOTrainer, DPOConfig
+from datasets import load_dataset
+
+PatchDPOTrainer()
+
+model, tokenizer = FastLanguageModel.from_pretrained(
+    model_name="./outputs/gemma-4-31b-qlora",
+    max_seq_length=8192,
+    load_in_4bit=True,
+)
+
+model = FastLanguageModel.get_peft_model(model, r=64, lora_alpha=128)
+
+dataset = load_dataset("json", data_files="./data/dpo_pairs.jsonl", split="train")
+
+trainer = DPOTrainer(
+    model=model,
+    ref_model=None,
+    tokenizer=tokenizer,
+    train_dataset=dataset,
+    args=DPOConfig(
+        per_device_train_batch_size=1,
+        gradient_accumulation_steps=8,
+        num_train_epochs=1,
+        learning_rate=5e-5,
+        bf16=True,
+        output_dir="./outputs/gemma-4-31b-dpo",
+    ),
+)
+trainer.train()
 ```
 
-**Expected VRAM usage:** ~24-28 GB with QLoRA + FlashAttention-2 + gradient checkpointing
+**Merge and export:**
+```python
+model.save_pretrained_merged("./outputs/gemma-4-31b-merged", tokenizer)
+# Or export to GGUF for Ollama:
+model.save_pretrained_gguf("./outputs/gemma-4-31b-gguf", tokenizer, quantization_method="q4_k_m")
+```
+
+**Expected VRAM usage:** ~16–20 GB with Unsloth QLoRA (vs ~24–28 GB with standard Axolotl QLoRA)
 
 ### Training Phases
 
@@ -479,7 +524,7 @@ Score 1–5 per dimension. Track deltas across training runs. This is expensive 
 - [ ] Draft initial STYLES/ files for your most-used aesthetics
 - [ ] Draft initial PATTERNS/ files for your most-used patterns
 - [ ] Write Obsidian → JSONL extraction script
-- [ ] Install Axolotl and verify FlashAttention-2 works on RTX 5090
+- [ ] Install Unsloth and verify FlashAttention-2 works on RTX 5090
 - [ ] Install vLLM and test serving a small model
 - [x] Build Tailwind class validator eval script (Layer 1)
 - [x] Build structural validator (Layer 2) and render validity check (Layer 3)
@@ -505,7 +550,7 @@ Score 1–5 per dimension. Track deltas across training runs. This is expensive 
 | Build vs fine-tune | Fine-tune existing model | Cost, time, sufficient for goal |
 | Base model | Gemma 4 31B | 256K context, strong code benchmarks, fits 32GB at Q4 |
 | Training method | QLoRA + DPO | Single GPU viable, suppresses base model fallback |
-| Framework | Axolotl + BitsAndBytes + FlashAttention-2 | Production-grade, memory-optimized, YAML-driven |
+| Framework | Unsloth + BitsAndBytes + FlashAttention-2 | 2–5x faster iteration on single GPU, 40–60% VRAM reduction, easy to swap for Axolotl later |
 | Output targets | React and HTML/CSS | Both supported, tagged per example |
 | Config injection | Full config every inference | Simpler, more reliable than partial slices |
 | Injection method | Cursor Rules (always-on) + @-file (per-prompt) | IDE-native, zero friction, format-portable to training pipeline |
